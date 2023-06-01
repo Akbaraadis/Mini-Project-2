@@ -2,7 +2,7 @@ package main
 
 import (
 	"github.com/gin-gonic/gin"
-	mysql "gorm.io/driver/mysql"
+	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 	"log"
 	"net/http"
@@ -10,9 +10,10 @@ import (
 
 type Actors struct {
 	gorm.Model
-	Username string `json:"username"`
-	Password string `json:"password"`
-	Role_id  string `json:"role_id"`
+	Username     string `json:"username"`
+	Password     string `json:"password"`
+	Role_id      string `json:"role_id"`
+	Role_creator string `json:"role_creator"`
 }
 
 var db *gorm.DB
@@ -36,14 +37,41 @@ func createCustomer(c *gin.Context) {
 	}
 
 	// Simpan data ke database
-	err := db.Create(&actors).Error
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
+	var FlagRole int
+	switch {
+	case actors.Role_id == "3":
+		FlagRole = 0
+	case actors.Role_id == "2":
+		FlagRole = 1
+	}
+
+	var FlagError int
+
+	if FlagRole == 0 {
+		err := db.Create(&actors).Error
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			FlagError = 1
+			return
+		}
+	} else {
+		if actors.Role_creator == "2" {
+			err := db.Select("username", "password", "role_id").Create(&actors).Error
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				FlagError = 1
+				return
+			}
+		} else {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Permission Denied"})
+			FlagError = 1
+		}
 	}
 
 	// Tampilkan respons berhasil
-	c.JSON(http.StatusOK, gin.H{"message": "User created successfully", "user": actors})
+	if FlagError != 1 {
+		c.JSON(http.StatusOK, gin.H{"message": "User created successfully", "user": actors})
+	}
 }
 
 func setupRouter() *gin.Engine {
