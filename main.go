@@ -14,6 +14,8 @@ type Actors struct {
 	Password     string `json:"password"`
 	Role_id      string `json:"role_id"`
 	Role_creator string `json:"role_creator"`
+	Flag_act     string `json:"flag_act"`
+	Flag_ver     string `json:"flag_ver"`
 }
 
 var db *gorm.DB
@@ -48,7 +50,7 @@ func createCustomer(c *gin.Context) {
 	var FlagError int
 
 	if FlagRole == 0 {
-		err := db.Create(&actors).Error
+		err := db.Select("username", "password", "role_id").Create(&actors).Error
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			FlagError = 1
@@ -74,11 +76,31 @@ func createCustomer(c *gin.Context) {
 	}
 }
 
+func getCustomer(c *gin.Context) {
+	var actors []Actors
+
+	username := c.GetHeader("username")
+
+	if username == "superadmin" {
+		// Dapatkan semua data user dari database dengan kondisi WHERE flag_ver = nil
+		if err := db.Where("flag_ver", nil).Find(&actors).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+
+		// Tampilkan data user
+		c.JSON(http.StatusOK, gin.H{"users": actors})
+	} else {
+		c.JSON(http.StatusInternalServerError, gin.H{"Error": "Permission Denied"})
+	}
+
+}
+
 func setupRouter() *gin.Engine {
 	r := gin.Default()
 
 	r.POST("/customers", createCustomer)
-	//r.GET("/users", getUsers)
+	r.GET("/customers", getCustomer)
 	//r.GET("/users/:id", getUserById)
 	//r.PUT("/users/:id", updateUser)
 	//r.DELETE("/users/:id", deleteUser)
