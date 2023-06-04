@@ -164,6 +164,46 @@ func getCustomer(c *gin.Context) {
 
 }
 
+func getActorsById(c *gin.Context) {
+	var actors Actors
+	userID := c.Param("id")
+
+	var checker Actors
+
+	username := c.GetHeader("username")
+	var flag_verified int
+	if username == "superadmin" {
+		flag_verified = 1
+	} else {
+		if err := db.Where("username", username).First(&checker).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+
+		if checker.Role_id == "2" {
+			flag_verified = 2
+		}
+	}
+
+	if flag_verified == 1 || flag_verified == 2 {
+		// Dapatkan data user dari database berdasarkan ID
+		if err := db.First(&actors, userID).Error; err != nil {
+			if errors.Is(gorm.ErrRecordNotFound, err) {
+				c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
+				return
+			}
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+
+		// Tampilkan data user
+		c.JSON(http.StatusOK, gin.H{"user": actors})
+	} else {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Permission Denied"})
+	}
+
+}
+
 func getAdmin(c *gin.Context) {
 	var actors []Actors
 	var checker Actors
@@ -285,8 +325,9 @@ func setupRouter() *gin.Engine {
 	r.POST("/customers", createCustomer)
 	r.GET("/approved", getWaitingApproved)
 	r.GET("/customers", getCustomer)
+	r.GET("/customers/:id", getActorsById)
 	r.GET("/admin", getAdmin)
-	//r.GET("/users/:id", getUserById)
+	r.GET("/admin:id", getActorsById)
 	//r.PUT("/users/:id", updateUser)
 	r.DELETE("/customers/:id", deleteCustomer)
 
