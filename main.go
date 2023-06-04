@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"github.com/gin-gonic/gin"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
@@ -93,7 +94,56 @@ func getCustomer(c *gin.Context) {
 	} else {
 		c.JSON(http.StatusInternalServerError, gin.H{"Error": "Permission Denied"})
 	}
+}
 
+func deleteCustomer(c *gin.Context) {
+	var actor Actors
+	var deleter Actors
+
+	username := c.GetHeader("username")
+	var flag_verified int
+	if username == "superadmin" {
+		flag_verified = 1
+	} else {
+		if err := db.Where("username", username).First(&deleter).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+
+		if deleter.Role_id == "2" {
+			flag_verified = 2
+		}
+	}
+
+	actorID := c.Param("id")
+	// Dapatkan data user dari database berdasarkan ID
+	if err := db.First(&actor, actorID).Error; err != nil {
+		if errors.Is(gorm.ErrRecordNotFound, err) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Hapus data user dari database
+	if flag_verified == 1 {
+		if err := db.Delete(&actor).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+	} else if flag_verified == 2 && actor.Role_id == "3" {
+		if err := db.Delete(&actor).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+	} else {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Permission Denied"})
+		return
+	}
+
+	// Tampilkan respons berhasil
+	c.JSON(http.StatusOK, gin.H{"message": "User deleted successfully"})
 }
 
 func setupRouter() *gin.Engine {
@@ -103,7 +153,7 @@ func setupRouter() *gin.Engine {
 	r.GET("/customers", getCustomer)
 	//r.GET("/users/:id", getUserById)
 	//r.PUT("/users/:id", updateUser)
-	//r.DELETE("/users/:id", deleteUser)
+	r.DELETE("/customers/:id", deleteCustomer)
 
 	return r
 }
