@@ -6,7 +6,9 @@ import (
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 	"log"
+	"math"
 	"net/http"
+	"strconv"
 )
 
 type Actors struct {
@@ -116,14 +118,45 @@ func getCustomer(c *gin.Context) {
 	}
 
 	if flag_verified == 1 || flag_verified == 2 {
-		// Dapatkan semua data user dari database dengan kondisi WHERE flag_ver = nil
-		if err := db.Where("role_id", "3").Find(&actors).Error; err != nil {
+		// Dapatkan nilai halaman dan ukuran halaman dari query string untuk pagination
+		pageStr := c.DefaultQuery("page", "1")
+		sizeStr := c.DefaultQuery("size", "10")
+
+		// Konversi nilai halaman dan ukuran halaman ke tipe data yang sesuai
+		page, err := strconv.Atoi(pageStr)
+		if err != nil || page < 1 {
+			page = 1
+		}
+
+		size, err := strconv.Atoi(sizeStr)
+		if err != nil || size < 1 {
+			size = 10
+		}
+
+		// Dapatkan semua data admin dari database dengan kondisi WHERE role_id = 2
+		var totalRecords int64
+		db.Model(&Actors{}).Where("role_id = ?", "2").Count(&totalRecords)
+
+		// Hitung offset berdasarkan halaman dan ukuran halaman
+		offset := (page - 1) * size
+		if offset < 0 {
+			offset = 0
+		}
+
+		// Query data admin dengan pagination
+		if err := db.Where("role_id = ?", "3").Offset(offset).Limit(size).Find(&actors).Error; err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
 
-		// Tampilkan data user
-		c.JSON(http.StatusOK, gin.H{"users": actors})
+		// Tampilkan data admin dan informasi pagination
+		c.JSON(http.StatusOK, gin.H{
+			"users": actors,
+			"page":  page,
+			"size":  size,
+			"total": totalRecords,
+			"pages": int(math.Ceil(float64(totalRecords) / float64(size))),
+		})
 	} else {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Permission Denied"})
 		return
@@ -151,14 +184,45 @@ func getAdmin(c *gin.Context) {
 	}
 
 	if flag_verified == 1 || flag_verified == 2 {
-		// Dapatkan semua data user dari database dengan kondisi WHERE flag_ver = nil
-		if err := db.Where("role_id", "2").Find(&actors).Error; err != nil {
+		// Dapatkan nilai halaman dan ukuran halaman dari query string untuk pagination
+		pageStr := c.DefaultQuery("page", "1")
+		sizeStr := c.DefaultQuery("size", "10")
+
+		// Konversi nilai halaman dan ukuran halaman ke tipe data yang sesuai
+		page, err := strconv.Atoi(pageStr)
+		if err != nil || page < 1 {
+			page = 1
+		}
+
+		size, err := strconv.Atoi(sizeStr)
+		if err != nil || size < 1 {
+			size = 10
+		}
+
+		// Dapatkan semua data admin dari database dengan kondisi WHERE role_id = 2
+		var totalRecords int64
+		db.Model(&Actors{}).Where("role_id = ?", "2").Count(&totalRecords)
+
+		// Hitung offset berdasarkan halaman dan ukuran halaman
+		offset := (page - 1) * size
+		if offset < 0 {
+			offset = 0
+		}
+
+		// Query data admin dengan pagination
+		if err := db.Where("role_id = ?", "2").Offset(offset).Limit(size).Find(&actors).Error; err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
 
-		// Tampilkan data user
-		c.JSON(http.StatusOK, gin.H{"users": actors})
+		// Tampilkan data admin dan informasi pagination
+		c.JSON(http.StatusOK, gin.H{
+			"users": actors,
+			"page":  page,
+			"size":  size,
+			"total": totalRecords,
+			"pages": int(math.Ceil(float64(totalRecords) / float64(size))),
+		})
 	} else {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Permission Denied"})
 		return
