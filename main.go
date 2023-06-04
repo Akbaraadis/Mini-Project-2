@@ -7,6 +7,7 @@ import (
 	"gorm.io/gorm"
 	"log"
 	"math"
+	"miniproject2/module/customers"
 	"net/http"
 	"strconv"
 )
@@ -31,47 +32,47 @@ func initDB() {
 	}
 }
 
-func createCustomer(c *gin.Context) {
-	var actors Actors
-	var checker Actors
-
-	username := c.GetHeader("username")
-	var flag_verified int
-	if username == "superadmin" {
-		flag_verified = 1
-	} else {
-		if err := db.Where("username", username).First(&checker).Error; err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-			return
-		}
-
-		if checker.Role_id == "2" {
-			flag_verified = 2
-		}
-	}
-
-	if flag_verified == 1 || flag_verified == 2 {
-		// Baca data JSON dari body permintaan
-		if err := c.BindJSON(&actors); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-			return
-		}
-
-		if actors.Role_id == "3" {
-			err := db.Select("username", "password", "role_id", "flag_act").Create(&actors).Error
-			if err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-				return
-			}
-		} else {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Can't create except Customer Actor"})
-			return
-		}
-	}
-
-	// Tampilkan respons berhasil
-	c.JSON(http.StatusOK, gin.H{"message": "User created successfully", "user": actors})
-}
+//func createCustomer(c *gin.Context) {
+//	var actors Actors
+//	var checker Actors
+//
+//	username := c.GetHeader("username")
+//	var flag_verified int
+//	if username == "superadmin" {
+//		flag_verified = 1
+//	} else {
+//		if err := db.Where("username", username).First(&checker).Error; err != nil {
+//			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+//			return
+//		}
+//
+//		if checker.Role_id == "2" {
+//			flag_verified = 2
+//		}
+//	}
+//
+//	if flag_verified == 1 || flag_verified == 2 {
+//		// Baca data JSON dari body permintaan
+//		if err := c.BindJSON(&actors); err != nil {
+//			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+//			return
+//		}
+//
+//		if actors.Role_id == "3" {
+//			err := db.Select("username", "password", "role_id", "flag_act").Create(&actors).Error
+//			if err != nil {
+//				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+//				return
+//			}
+//		} else {
+//			c.JSON(http.StatusInternalServerError, gin.H{"error": "Can't create except Customer Actor"})
+//			return
+//		}
+//	}
+//
+//	// Tampilkan respons berhasil
+//	c.JSON(http.StatusOK, gin.H{"message": "User created successfully", "user": actors})
+//}
 
 func createAdmin(c *gin.Context) {
 	var actors Actors
@@ -399,7 +400,13 @@ func deleteCustomer(c *gin.Context) {
 func setupRouter() *gin.Engine {
 	r := gin.Default()
 
-	r.POST("/customers", createCustomer)
+	actorsRepo := customers.NewActorsRepository(db)
+	actorsUseCase := customers.NewActorsUseCase(actorsRepo)
+	actorsController := customers.NewActorsController(actorsUseCase)
+
+	r.POST("/customers", actorsController.CreateCustomer)
+
+	//r.POST("/customers", createCustomer)
 	r.POST("/admin", createAdmin)
 	r.GET("/approved", getWaitingApproved)
 	r.GET("/customers", getCustomer)
