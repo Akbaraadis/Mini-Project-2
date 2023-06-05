@@ -410,6 +410,17 @@ func loginAuth(c *gin.Context) {
 
 	username, password, status := c.Request.BasicAuth()
 
+	// Membuat objek hash dari algoritma SHA-256
+	hash := sha256.New()
+	// Mengupdate hash dengan data yang ingin di-hash
+	hash.Write([]byte(password))
+	// Mengambil nilai hash sebagai array byte
+	hashBytes := hash.Sum(nil)
+	// Mengubah array byte menjadi representasi heksadesimal
+	hashString := hex.EncodeToString(hashBytes)
+
+	password = hashString
+
 	if !status {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
 		return
