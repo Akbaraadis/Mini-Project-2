@@ -1,6 +1,8 @@
 package main
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"github.com/gin-gonic/gin"
 	"gorm.io/driver/mysql"
@@ -101,24 +103,30 @@ func createAdmin(c *gin.Context) {
 			return
 		}
 
-		if actors.Role_id != "2" {
+		// Membuat objek hash dari algoritma SHA-256
+		hash := sha256.New()
+		// Mengupdate hash dengan data yang ingin di-hash
+		hash.Write([]byte(actors.Password))
+		// Mengambil nilai hash sebagai array byte
+		hashBytes := hash.Sum(nil)
+		// Mengubah array byte menjadi representasi heksadesimal
+		hashString := hex.EncodeToString(hashBytes)
+
+		actors.Password = hashString
+
+		if actors.Role_id == "2" {
 			err := db.Select("username", "password", "role_id", "flag_act").Create(&actors).Error
 			if err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 				return
 			}
 		} else {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Permission Denied"})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Can't create except admin"})
 			return
 		}
-	} else {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Permission Denied"})
-		return
 	}
-
 	// Tampilkan respons berhasil
 	c.JSON(http.StatusOK, gin.H{"message": "User created successfully", "user": actors})
-
 }
 
 func getWaitingApproved(c *gin.Context) {
@@ -397,6 +405,29 @@ func deleteCustomer(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "User deleted successfully"})
 }
 
+func loginAuth(c *gin.Context) {
+	var checker Actors
+
+	username, password, status := c.Request.BasicAuth()
+
+	if !status {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
+
+	if err := db.Where("username", username).First(&checker).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": username})
+		return
+	}
+	if checker.Password == password {
+		c.JSON(http.StatusOK, gin.H{"message": "Login has been successful"})
+		return
+	} else {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Wrong Password"})
+		return
+	}
+}
+
 func setupRouter() *gin.Engine {
 	r := gin.Default()
 
@@ -415,6 +446,7 @@ func setupRouter() *gin.Engine {
 	r.GET("/admin:id", getActorsById)
 	r.PUT("/admin/:id", updateAdmin)
 	r.DELETE("/customers/:id", deleteCustomer)
+	r.POST("/login", loginAuth)
 
 	return r
 }
