@@ -1,6 +1,8 @@
 package customers
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"github.com/gin-gonic/gin"
 	"net/http"
 )
@@ -43,6 +45,17 @@ func (uc *actorsUseCase) CreateCustomer(c *gin.Context) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
+
+		// Membuat objek hash dari algoritma SHA-256
+		hash := sha256.New()
+		// Mengupdate hash dengan data yang ingin di-hash
+		hash.Write([]byte(actors.Password))
+		// Mengambil nilai hash sebagai array byte
+		hashBytes := hash.Sum(nil)
+		// Mengubah array byte menjadi representasi heksadesimal
+		hashString := hex.EncodeToString(hashBytes)
+
+		actors.Password = hashString
 
 		if actors.RoleID == "3" {
 			if err := uc.actorsRepo.Create(&actors); err != nil {
