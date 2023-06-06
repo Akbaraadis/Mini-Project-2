@@ -5,22 +5,24 @@ import (
 	"encoding/hex"
 	"errors"
 	"github.com/gin-gonic/gin"
+	"github.com/golang-jwt/jwt"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 	"log"
 	"math"
-	"miniproject2/module/customers"
 	"net/http"
 	"strconv"
+	"time"
 )
 
 type Actors struct {
 	gorm.Model
-	Username string `json:"username"`
-	Password string `json:"password"`
-	Role_id  string `json:"role_id"`
-	Flag_act string `json:"flag_act"`
-	Flag_ver string `json:"flag_ver"`
+	Username  string `json:"username"`
+	Password  string `json:"password"`
+	Tokey_key string `json:"token_key"`
+	Role_id   string `json:"role_id"`
+	Flag_act  string `json:"flag_act"`
+	Flag_ver  string `json:"flag_ver"`
 }
 
 var db *gorm.DB
@@ -34,66 +36,75 @@ func initDB() {
 	}
 }
 
-//func createCustomer(c *gin.Context) {
-//	var actors Actors
-//	var checker Actors
-//
-//	username := c.GetHeader("username")
-//	var flag_verified int
-//	if username == "superadmin" {
-//		flag_verified = 1
-//	} else {
-//		if err := db.Where("username", username).First(&checker).Error; err != nil {
-//			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-//			return
-//		}
-//
-//		if checker.Role_id == "2" {
-//			flag_verified = 2
-//		}
-//	}
-//
-//	if flag_verified == 1 || flag_verified == 2 {
-//		// Baca data JSON dari body permintaan
-//		if err := c.BindJSON(&actors); err != nil {
-//			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-//			return
-//		}
-//
-//		if actors.Role_id == "3" {
-//			err := db.Select("username", "password", "role_id", "flag_act").Create(&actors).Error
-//			if err != nil {
-//				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-//				return
-//			}
-//		} else {
-//			c.JSON(http.StatusInternalServerError, gin.H{"error": "Can't create except Customer Actor"})
-//			return
-//		}
-//	}
-//
-//	// Tampilkan respons berhasil
-//	c.JSON(http.StatusOK, gin.H{"message": "User created successfully", "user": actors})
-//}
+func createCustomer(c *gin.Context) {
+	var actors Actors
+	var checker Actors
+
+	token_key := c.GetHeader("token_key")
+	if err := db.Where("token_key", token_key).First(&checker).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	var flag_verified int
+	if checker.Username == "superadmin" {
+		flag_verified = 1
+	} else if checker.Role_id == "2" {
+		flag_verified = 2
+	}
+
+	if flag_verified == 1 || flag_verified == 2 {
+		// Baca data JSON dari body permintaan
+		if err := c.BindJSON(&actors); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+
+		// Membuat objek hash dari algoritma SHA-256
+		hash := sha256.New()
+		// Mengupdate hash dengan data yang ingin di-hash
+		hash.Write([]byte(actors.Password))
+		// Mengambil nilai hash sebagai array byte
+		hashBytes := hash.Sum(nil)
+		// Mengubah array byte menjadi representasi heksadesimal
+		hashString := hex.EncodeToString(hashBytes)
+
+		actors.Password = hashString
+
+		if actors.Role_id == "3" {
+			err := db.Select("username", "password", "role_id", "flag_act").Create(&actors).Error
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+		} else {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Can't create except Customer Actor"})
+			return
+		}
+
+		// Tampilkan respons berhasil
+		c.JSON(http.StatusOK, gin.H{"message": "User created successfully", "user": actors})
+	} else {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Permission Denied"})
+		return
+	}
+
+}
 
 func createAdmin(c *gin.Context) {
 	var actors Actors
 
 	var checker Actors
 
-	username := c.GetHeader("username")
+	token_key := c.GetHeader("token_key")
 	var flag_verified int
-	if username == "superadmin" {
+	if err := db.Where("token_key", token_key).First(&checker).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	if checker.Username == "superadmin" {
 		flag_verified = 1
-	} else {
-		if err := db.Where("username", username).First(&checker).Error; err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-			return
-		}
-
-		if checker.Role_id == "2" {
-			flag_verified = 2
-		}
+	} else if checker.Role_id == "2" {
+		flag_verified = 2
 	}
 
 	if flag_verified == 2 {
@@ -124,17 +135,27 @@ func createAdmin(c *gin.Context) {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Can't create except admin"})
 			return
 		}
+
+		// Tampilkan respons berhasil
+		c.JSON(http.StatusOK, gin.H{"message": "User created successfully", "user": actors})
+	} else {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Permission Denied"})
+		return
 	}
-	// Tampilkan respons berhasil
-	c.JSON(http.StatusOK, gin.H{"message": "User created successfully", "user": actors})
+
 }
 
 func getWaitingApproved(c *gin.Context) {
 	var actors []Actors
+	var checker Actors
 
-	username := c.GetHeader("username")
+	token_key := c.GetHeader("token_key")
+	if err := db.Where("token_key", token_key).First(&checker).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
 
-	if username == "superadmin" {
+	if checker.Username == "superadmin" {
 		// Dapatkan semua data user dari database dengan kondisi WHERE flag_ver = nil
 		if err := db.Where("flag_ver", nil).Find(&actors).Error; err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -152,19 +173,16 @@ func getCustomer(c *gin.Context) {
 	var actors []Actors
 	var checker Actors
 
-	username := c.GetHeader("username")
+	token_key := c.GetHeader("token_key")
+	if err := db.Where("token_key", token_key).First(&checker).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
 	var flag_verified int
-	if username == "superadmin" {
+	if checker.Username == "superadmin" {
 		flag_verified = 1
-	} else {
-		if err := db.Where("username", username).First(&checker).Error; err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-			return
-		}
-
-		if checker.Role_id == "2" {
-			flag_verified = 2
-		}
+	} else if checker.Role_id == "2" {
+		flag_verified = 2
 	}
 
 	if flag_verified == 1 || flag_verified == 2 {
@@ -220,19 +238,17 @@ func getActorsById(c *gin.Context) {
 
 	var checker Actors
 
-	username := c.GetHeader("username")
-	var flag_verified int
-	if username == "superadmin" {
-		flag_verified = 1
-	} else {
-		if err := db.Where("username", username).First(&checker).Error; err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-			return
-		}
+	token_key := c.GetHeader("token_key")
+	if err := db.Where("token_key", token_key).First(&checker).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
 
-		if checker.Role_id == "2" {
-			flag_verified = 2
-		}
+	var flag_verified int
+	if checker.Username == "superadmin" {
+		flag_verified = 1
+	} else if checker.Role_id == "2" {
+		flag_verified = 2
 	}
 
 	if flag_verified == 1 || flag_verified == 2 {
@@ -258,19 +274,17 @@ func getAdmin(c *gin.Context) {
 	var actors []Actors
 	var checker Actors
 
-	username := c.GetHeader("username")
-	var flag_verified int
-	if username == "superadmin" {
-		flag_verified = 1
-	} else {
-		if err := db.Where("username", username).First(&checker).Error; err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-			return
-		}
+	token_key := c.GetHeader("token_key")
+	if err := db.Where("token_key", token_key).First(&checker).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
 
-		if checker.Role_id == "2" {
-			flag_verified = 2
-		}
+	var flag_verified int
+	if checker.Username == "superadmin" {
+		flag_verified = 1
+	} else if checker.Role_id == "2" {
+		flag_verified = 2
 	}
 
 	if flag_verified == 1 || flag_verified == 2 {
@@ -323,9 +337,15 @@ func updateAdmin(c *gin.Context) {
 	var actors Actors
 	userID := c.Param("id")
 
-	username := c.GetHeader("username")
+	var checker Actors
 
-	if username == "superadmin" {
+	token_key := c.GetHeader("token_key")
+	if err := db.Where("token_key", token_key).First(&checker).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	if checker.Username == "superadmin" {
 		// Dapatkan data user dari database berdasarkan ID
 		if err := db.First(&actors, userID).Error; err != nil {
 			if errors.Is(gorm.ErrRecordNotFound, err) {
@@ -359,19 +379,17 @@ func deleteCustomer(c *gin.Context) {
 	var actor Actors
 	var deleter Actors
 
-	username := c.GetHeader("username")
-	var flag_verified int
-	if username == "superadmin" {
-		flag_verified = 1
-	} else {
-		if err := db.Where("username", username).First(&deleter).Error; err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-			return
-		}
+	token_key := c.GetHeader("token_key")
+	if err := db.Where("token_key", token_key).First(&deleter).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
 
-		if deleter.Role_id == "2" {
-			flag_verified = 2
-		}
+	var flag_verified int
+	if deleter.Username == "superadmin" {
+		flag_verified = 1
+	} else if deleter.Role_id == "2" {
+		flag_verified = 2
 	}
 
 	actorID := c.Param("id")
@@ -431,7 +449,25 @@ func loginAuth(c *gin.Context) {
 		return
 	}
 	if checker.Password == password {
-		c.JSON(http.StatusOK, gin.H{"message": "Login has been successful"})
+		// Inisialisasi klaim-klaim yang ingin Anda sertakan dalam token
+		claims := jwt.MapClaims{
+			"sub":  checker.ID,
+			"name": checker.Username,
+			"iat":  time.Now().Unix(),
+			"exp":  time.Now().Add(time.Hour * 1).Unix(),
+		}
+		// Tandatangani token dengan kunci rahasia
+		token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+		signedToken, err := token.SignedString([]byte("secret-key"))
+		if err != nil {
+			// Penanganan kesalahan
+		}
+
+		if err := db.Model(&checker).Update("token_key", signedToken).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"message": "Login has been successful", "token_key": signedToken})
 		return
 	} else {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Wrong Password"})
@@ -442,13 +478,13 @@ func loginAuth(c *gin.Context) {
 func setupRouter() *gin.Engine {
 	r := gin.Default()
 
-	actorsRepo := customers.NewActorsRepository(db)
-	actorsUseCase := customers.NewActorsUseCase(actorsRepo)
-	actorsController := customers.NewActorsController(actorsUseCase)
+	//actorsRepo := customers.NewActorsRepository(db)
+	//actorsUseCase := customers.NewActorsUseCase(actorsRepo)
+	//actorsController := customers.NewActorsController(actorsUseCase)
 
-	r.POST("/customers", actorsController.CreateCustomer)
+	//r.POST("/customers", actorsController.CreateCustomer)
 
-	//r.POST("/customers", createCustomer)
+	r.POST("/customers", createCustomer)
 	r.POST("/admin", createAdmin)
 	r.GET("/approved", getWaitingApproved)
 	r.GET("/customers", getCustomer)
