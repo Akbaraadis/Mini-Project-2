@@ -24,17 +24,16 @@ func NewActorsUseCase(actorsRepo ActorsRepository) ActorsUseCase {
 func (uc *actorsUseCase) CreateCustomer(c *gin.Context) {
 	var actors Actor
 
-	username := c.GetHeader("username")
+	token_key := c.GetHeader("token_key")
 	var flagVerified int
-	if username == "superadmin" {
+	checker, err := uc.actorsRepo.FindByUsername(token_key)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	if checker.Username == "superadmin" {
 		flagVerified = 1
 	} else {
-		checker, err := uc.actorsRepo.FindByUsername(username)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-			return
-		}
-
 		if checker != nil && checker.RoleID == "2" {
 			flagVerified = 2
 		}
