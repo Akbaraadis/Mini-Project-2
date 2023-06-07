@@ -1,71 +1,66 @@
 package customers
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
-	"github.com/gin-gonic/gin"
-	"net/http"
+	"errors"
+	"github.com/golang-jwt/jwt"
+	"time"
 )
 
 type ActorsUseCase interface {
-	CreateCustomer(c *gin.Context)
+	//CreateCustomer(actors *Actors) error
+	//CreateAdmin(actors *Actors) error
+	LoginAuth(username, password string) (string, error)
 }
 
 type actorsUseCase struct {
-	actorsRepo ActorsRepository
+	repo ActorsRepository
 }
 
-func NewActorsUseCase(actorsRepo ActorsRepository) ActorsUseCase {
+func NewActorsUseCase(repo ActorsRepository) ActorsUseCase {
 	return &actorsUseCase{
-		actorsRepo: actorsRepo,
+		repo: repo,
 	}
 }
 
-func (uc *actorsUseCase) CreateCustomer(c *gin.Context) {
-	var actors Actor
+//func (uc *actorsUseCase) CreateCustomer(actors *Actors) error {
+//	return uc.repo.CreateActor(actors)
+//}
+//
+//func (uc *actorsUseCase) CreateAdmin(actors *Actors) error {
+//	return uc.repo.CreateActor(actors)
+//}
+//
+//func (uc *actorsUseCase) CheckRole(token string) (*Actors, error) {
+//	return uc.repo.GetActorByToken(token)
+//}
 
-	token_key := c.GetHeader("token_key")
-	var flagVerified int
-	checker, err := uc.actorsRepo.FindByUsername(token_key)
+func (uc *actorsUseCase) LoginAuth(username, password string) (string, error) {
+	actor, err := uc.repo.GetActorByUsername(username)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-	if checker.Username == "superadmin" {
-		flagVerified = 1
-	} else {
-		if checker != nil && checker.RoleID == "2" {
-			flagVerified = 2
-		}
+		return "", err
 	}
 
-	if flagVerified == 1 || flagVerified == 2 {
-		if err := c.BindJSON(&actors); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-			return
-		}
-
-		// Membuat objek hash dari algoritma SHA-256
-		hash := sha256.New()
-		// Mengupdate hash dengan data yang ingin di-hash
-		hash.Write([]byte(actors.Password))
-		// Mengambil nilai hash sebagai array byte
-		hashBytes := hash.Sum(nil)
-		// Mengubah array byte menjadi representasi heksadesimal
-		hashString := hex.EncodeToString(hashBytes)
-
-		actors.Password = hashString
-
-		if actors.RoleID == "3" {
-			if err := uc.actorsRepo.Create(&actors); err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-				return
-			}
-		} else {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Can't create except Customer Actor"})
-			return
-		}
+	if actor.Password != password {
+		return "", errors.New("Wrong Password")
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "User created successfully", "user": actors})
+	claims := jwt.MapClaims{
+		"sub":  actor.ID,
+		"name": actor.Username,
+		"iat":  time.Now().Unix(),
+		"exp":  time.Now().Add(time.Hour * 1).Unix(),
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	signedToken, err := token.SignedString([]byte("secret-key"))
+	if err != nil {
+		return "", err
+	}
+
+	err = uc.repo.UpdateTokenKey(actor, signedToken)
+	if err != nil {
+		return "", err
+	}
+
+	return signedToken, nil
 }
