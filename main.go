@@ -5,14 +5,13 @@ import (
 	"encoding/hex"
 	"errors"
 	"github.com/gin-gonic/gin"
-	"github.com/golang-jwt/jwt"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 	"log"
 	"math"
+	"miniproject2/module/customers"
 	"net/http"
 	"strconv"
-	"time"
 )
 
 type Actors struct {
@@ -423,66 +422,60 @@ func deleteCustomer(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "User deleted successfully"})
 }
 
-func loginAuth(c *gin.Context) {
-	var checker Actors
-
-	username, password, status := c.Request.BasicAuth()
-
-	// Membuat objek hash dari algoritma SHA-256
-	hash := sha256.New()
-	// Mengupdate hash dengan data yang ingin di-hash
-	hash.Write([]byte(password))
-	// Mengambil nilai hash sebagai array byte
-	hashBytes := hash.Sum(nil)
-	// Mengubah array byte menjadi representasi heksadesimal
-	hashString := hex.EncodeToString(hashBytes)
-
-	password = hashString
-
-	if !status {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
-		return
-	}
-
-	if err := db.Where("username", username).First(&checker).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": username})
-		return
-	}
-	if checker.Password == password {
-		// Inisialisasi klaim-klaim yang ingin Anda sertakan dalam token
-		claims := jwt.MapClaims{
-			"sub":  checker.ID,
-			"name": checker.Username,
-			"iat":  time.Now().Unix(),
-			"exp":  time.Now().Add(time.Hour * 1).Unix(),
-		}
-		// Tandatangani token dengan kunci rahasia
-		token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-		signedToken, err := token.SignedString([]byte("secret-key"))
-		if err != nil {
-			// Penanganan kesalahan
-		}
-
-		if err := db.Model(&checker).Update("token_key", signedToken).Error; err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-			return
-		}
-		c.JSON(http.StatusOK, gin.H{"message": "Login has been successful", "token_key": signedToken})
-		return
-	} else {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Wrong Password"})
-		return
-	}
-}
+//func loginAuth(c *gin.Context) {
+//	var checker Actors
+//
+//	username, password, status := c.Request.BasicAuth()
+//
+//	// Membuat objek hash dari algoritma SHA-256
+//	hash := sha256.New()
+//	// Mengupdate hash dengan data yang ingin di-hash
+//	hash.Write([]byte(password))
+//	// Mengambil nilai hash sebagai array byte
+//	hashBytes := hash.Sum(nil)
+//	// Mengubah array byte menjadi representasi heksadesimal
+//	hashString := hex.EncodeToString(hashBytes)
+//
+//	password = hashString
+//
+//	if !status {
+//		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+//		return
+//	}
+//
+//	if err := db.Where("username", username).First(&checker).Error; err != nil {
+//		c.JSON(http.StatusInternalServerError, gin.H{"error": username})
+//		return
+//	}
+//	if checker.Password == password {
+//		// Inisialisasi klaim-klaim yang ingin Anda sertakan dalam token
+//		claims := jwt.MapClaims{
+//			"sub":  checker.ID,
+//			"name": checker.Username,
+//			"iat":  time.Now().Unix(),
+//			"exp":  time.Now().Add(time.Hour * 1).Unix(),
+//		}
+//		// Tandatangani token dengan kunci rahasia
+//		token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+//		signedToken, err := token.SignedString([]byte("secret-key"))
+//		if err != nil {
+//			// Penanganan kesalahan
+//		}
+//
+//		if err := db.Model(&checker).Update("token_key", signedToken).Error; err != nil {
+//			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+//			return
+//		}
+//		c.JSON(http.StatusOK, gin.H{"message": "Login has been successful", "token_key": signedToken})
+//		return
+//	} else {
+//		c.JSON(http.StatusInternalServerError, gin.H{"error": "Wrong Password"})
+//		return
+//	}
+//}
 
 func setupRouter() *gin.Engine {
 	r := gin.Default()
-
-	//actorsRepo := customers.NewActorsRepository(db)
-	//actorsUseCase := customers.NewActorsUseCase(actorsRepo)
-	//actorsController := customers.NewActorsController(actorsUseCase)
-
-	//r.POST("/customers", actorsController.CreateCustomer)
 
 	r.POST("/customers", createCustomer)
 	r.POST("/admin", createAdmin)
@@ -493,7 +486,16 @@ func setupRouter() *gin.Engine {
 	r.GET("/admin:id", getActorsById)
 	r.PUT("/admin/:id", updateAdmin)
 	r.DELETE("/customers/:id", deleteCustomer)
-	r.POST("/login", loginAuth)
+	//r.POST("/login", loginAuth)
+
+	//Clean architecture done
+	actorsRepo := customers.NewActorsRepository(db)
+	actorsUseCase := customers.NewActorsUseCase(actorsRepo)
+	actorsHandler := customers.NewActorsHandler(actorsUseCase)
+
+	r.POST("/login", actorsHandler.LoginAuth)
+	//r.POST("/customers", actorsHandler.CreateCustomer)
+	//r.POST("/admin", actorsHandler.CreateAdmin)
 
 	return r
 }
